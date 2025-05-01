@@ -62,35 +62,27 @@ class DefinitionRegistry:
         return self.group_definition_map
 
 
-class LogParseContext:
+class GroupManager:
     def __init__(self, registry: DefinitionRegistry):
-        self.scenarios: List[Scenario] = []
-        self.current_scenario: Optional[Scenario] = None
-        self.active_groups: Dict[str, Group] = {}
         self.registry = registry
+        self.active_groups: Dict[str, Group] = {}
 
-    def start_scenario(self, name: str):
-        if self.current_scenario:
-            self.scenarios.append(self.current_scenario)
-        self.current_scenario = Scenario(name=name)
-        self.active_groups.clear()
-
-    def start_group(self, name: str):
-        if self.current_scenario is None:
+    def start_group(self, name: str, current_scenario: Optional[Scenario]):
+        if current_scenario is None:
             return
         if name in self.active_groups:
             completed_group = self.active_groups.pop(name)
-            self.current_scenario.groups.append(completed_group)
+            current_scenario.groups.append(completed_group)
         self.active_groups[name] = Group(name=name)
 
-    def end_group(self, name: str):
-        if self.current_scenario is None:
+    def end_group(self, name: str, current_scenario: Optional[Scenario]):
+        if current_scenario is None:
             return
         group = self.active_groups.pop(name, None)
         if group:
-            self.current_scenario.groups.append(group)
+            current_scenario.groups.append(group)
 
-    def add_log_to_active_groups(self, log: Log):
+    def add_log_to_groups(self, log: Log):
         for name, group in self.active_groups.items():
             definition = self.registry.get_group_definition(name)
             if not definition:
@@ -101,16 +93,55 @@ class LogParseContext:
                     group.logs.append(log)
                     break
 
-    def finalize(self):
+    def flush_groups(self, scenario: Scenario):
+        for group in self.active_groups.values():
+            scenario.groups.append(group)
+        self.active_groups.clear()
+
+
+class ScenarioManager:
+    def __init__(self):
+        self.scenarios: List[Scenario] = []
+        self.current_scenario: Optional[Scenario] = None
+
+    def start_scenario(self, name: str):
         if self.current_scenario:
-            for group in self.active_groups.values():
-                self.current_scenario.groups.append(group)
+            self.scenarios.append(self.current_scenario)
+        self.current_scenario = Scenario(name=name)
+
+    def finalize(self, group_manager: GroupManager):
+        if self.current_scenario:
+            group_manager.flush_groups(self.current_scenario)
             self.scenarios.append(self.current_scenario)
             self.current_scenario = None
-        self.active_groups.clear()
 
     def get_scenarios(self) -> List[Scenario]:
         return self.scenarios
+
+
+class LogParseContext:
+    def __init__(self, registry: DefinitionRegistry):
+        self.registry = registry
+        self.group_manager = GroupManager(registry)
+        self.scenario_manager = ScenarioManager()
+
+    def start_scenario(self, name: str):
+        self.scenario_manager.start_scenario(name)
+
+    def start_group(self, name: str):
+        self.group_manager.start_group(name, self.scenario_manager.current_scenario)
+
+    def end_group(self, name: str):
+        self.group_manager.end_group(name, self.scenario_manager.current_scenario)
+
+    def add_log_to_active_groups(self, log: Log):
+        self.group_manager.add_log_to_groups(log)
+
+    def finalize(self):
+        self.scenario_manager.finalize(self.group_manager)
+
+    def get_scenarios(self) -> List[Scenario]:
+        return self.scenario_manager.get_scenarios()
 
 
 # --- 로그 핸들러 ---
