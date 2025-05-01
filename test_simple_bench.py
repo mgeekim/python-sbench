@@ -22,7 +22,7 @@ def group_definitions():
             name="Network",
             start_pattern=re.compile(r"\[Network\] >>> Start network group"),
             end_pattern=re.compile(r"\[Network\] <<< End network group"),
-            log_patterns=["NetworkLog"]
+            log_patterns=["NetworkLog", "AuthLog"]
         ),
         "Database": GroupDefinition(
             name="Database",
@@ -91,11 +91,11 @@ def test_parser_state_with_active_and_completed_groups(group_definitions, sample
 
     assert len(login_scenario.groups[0].logs) == 1  # Network logs
     assert len(login_scenario.groups[1].logs) == 2  # Authentication logs
-    assert len(login_scenario.groups[2].logs) == 1  # Second Network logs
+    assert len(login_scenario.groups[2].logs) == 3  # Second Network logs
 
     signup_scenario = state.scenarios[1]
     assert len(signup_scenario.groups) == 2  # Network and Authentication groups
     assert signup_scenario.groups[0].name == 'Authentication'
     assert signup_scenario.groups[1].name == 'Network'
     assert len(signup_scenario.groups[0].logs) == 2  # Network logs
-    assert len(signup_scenario.groups[1].logs) == 3  # Authentication logs
+    assert len(signup_scenario.groups[1].logs) == 5  # Authentication logs
