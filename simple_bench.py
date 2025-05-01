@@ -39,10 +39,10 @@ class GroupDefinition:
     name: str
     start_pattern: re.Pattern
     end_pattern: re.Pattern
-    log_patterns: List[str]  # GroupDefinition은 LogPattern을 참조만 함
+    log_patterns: List[str]  # LogPattern 이름 목록
 
 
-# --- 상태 관리 ---
+# --- 파서 상태 ---
 
 class ParserState:
     def __init__(self):
@@ -54,58 +54,59 @@ class ParserState:
 
     def set_definitions(self, definitions: Dict[str, GroupDefinition], log_patterns: Dict[str, LogPattern]):
         self.group_definitions = definitions
-        self.log_patterns = log_patterns  # 이름으로 조회 가능하게
+        self.log_patterns = log_patterns
 
     def start_scenario(self, name: str):
-        # 새로운 시나리오가 시작되면 기존 시나리오는 self.scenarios에 저장
         if self.current_scenario:
             self.scenarios.append(self.current_scenario)
-        self.current_scenario = Scenario(name=name)  # 새로운 시나리오 시작
+        self.current_scenario = Scenario(name=name)
+        self.active_groups.clear()
 
     def start_group(self, name: str):
         if self.current_scenario is None:
             return
 
-        # 이미 active_groups에 해당 이름의 그룹이 존재하면, 이전 그룹을 'end' 상태로 변경
+        # 동일 이름 그룹이 이미 존재하면 완료 처리 후 교체
         if name in self.active_groups:
             completed_group = self.active_groups.pop(name)
-            self.current_scenario.groups.append(completed_group)  # 완료된 그룹을 scenario의 groups에 추가
+            self.current_scenario.groups.append(completed_group)
 
         group = Group(name=name)
-        self.active_groups[name] = group  # 새로운 그룹을 active_groups에 추가
+        self.active_groups[name] = group
 
     def end_group(self, name: str):
-        if name in self.active_groups:
-            completed_group = self.active_groups.pop(name)
-            self.current_scenario.groups.append(completed_group)  # 완료된 그룹을 scenario의 groups에 추가
+        if self.current_scenario is None:
+            return
+        group = self.active_groups.pop(name, None)
+        if group:
+            self.current_scenario.groups.append(group)
 
     def add_log_to_active_groups(self, log: Log):
-        for group_name, group in self.active_groups.items():
-            definition = self.group_definitions.get(group_name)
+        for name, group in self.active_groups.items():
+            definition = self.group_definitions.get(name)
             if not definition:
                 continue
+
             for pattern_name in definition.log_patterns:
                 pattern = self.log_patterns.get(pattern_name)
                 if pattern and pattern.pattern.search(log.content):
                     group.logs.append(log)
-                    break  # 한 번 매칭되면 추가 후 중단
+                    break
 
     def finalize(self):
-        # 모든 활성 그룹을 완료 상태로 변경하여 scenario의 groups에 추가
-        for group_name, group in self.active_groups.items():
-            self.current_scenario.groups.append(group)
-        self.active_groups.clear()
-
-        # 현재 시나리오가 존재하면 self.scenarios에 추가
         if self.current_scenario:
+            # 종료되지 않은 그룹도 포함하여 마무리
+            for group in self.active_groups.values():
+                self.current_scenario.groups.append(group)
             self.scenarios.append(self.current_scenario)
-        self.current_scenario = None  # 현재 시나리오를 초기화
+            self.current_scenario = None
+        self.active_groups.clear()
 
     def get_scenarios(self) -> List[Scenario]:
         return self.scenarios
 
 
-# --- 핸들러 정의 ---
+# --- 로그 핸들러 ---
 
 class BaseLogHandler:
     def handle(self, log: Log, state: ParserState):
