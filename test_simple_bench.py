@@ -47,30 +47,33 @@ def sample_logs():
         "04-30 10:00:00 1234 I [Scenario] LoginFlow",
         "04-30 10:00:01 1234 I [Network] >>> Start network group",
         "04-30 10:00:02 1234 I [Log:NETWORK] Request to /login",
-        "04-30 10:00:03 1234 I [Database] >>> Start database group",
-        "04-30 10:00:04 1234 I [Log:DB] Select user from db",
-        "04-30 10:00:05 1234 I [Network] <<< End network group",
-        "04-30 10:00:06 1234 I [Log:DB] Insert login history",
-        "04-30 10:00:07 1234 I [Database] <<< End database group",
-        "04-30 10:00:08 1234 I [UI] >>> Start UI group",
-        "04-30 10:00:09 1234 I [Log:UI] Render login page",
-        "04-30 10:00:10 1234 I [UI] <<< End UI group",
+        "04-30 10:00:03 1234 I [Log:UNKNOWN] This log is ignored",
+        "04-30 10:00:04 1234 I [Database] >>> Start database group",
+        "04-30 10:00:05 1234 I [Log:DB] Select user from db",
+        "04-30 10:00:06 1234 I [Log:UNDEFINED] Unmatched log message",
+        "04-30 10:00:07 1234 I [Network] <<< End network group",
+        "04-30 10:00:08 1234 I [Log:DB] Insert login history",
+        "04-30 10:00:09 1234 I [Database] <<< End database group",
+        "04-30 10:00:10 1234 I [UI] >>> Start UI group",
+        "04-30 10:00:11 1234 I [Log:UI] Render login page",
+        "04-30 10:00:12 1234 I [UI] <<< End UI group",
 
-        # Scenario: SignupFlow with repeated group start
         "04-30 10:01:00 1234 I [Scenario] SignupFlow",
         "04-30 10:01:01 1234 I [Network] >>> Start network group",
         "04-30 10:01:02 1234 I [Log:NETWORK] Request to /signup",
-        "04-30 10:01:03 1234 I [Network] >>> Start network group",  # without ending previous
-        "04-30 10:01:04 1234 I [Log:NETWORK] Retry request to /signup",
-        "04-30 10:01:05 1234 I [Network] <<< End network group",
-        "04-30 10:01:06 1234 I [Log:NETWORK] Final response",
-        "04-30 10:01:07 1234 I [Network] <<< End network group",
 
-        # Scenario: ProfileUpdate
+        "04-30 10:01:03 1234 I [Log:UNKNOWN] This log is also ignored",
+        "04-30 10:01:04 1234 I [Network] >>> Start network group",
+        "04-30 10:01:05 1234 I [Log:NETWORK] Retry request to /signup",
+        "04-30 10:01:06 1234 I [Network] <<< End network group",
+        "04-30 10:01:07 1234 I [Log:NETWORK] Final response",
+        "04-30 10:01:08 1234 I [Network] <<< End network group",
+
         "04-30 10:02:00 1234 I [Scenario] ProfileUpdate",
         "04-30 10:02:01 1234 I [Database] >>> Start database group",
         "04-30 10:02:02 1234 I [Log:DB] Load user profile",
         "04-30 10:02:03 1234 I [Log:DB] Update user info",
+        "04-30 10:02:03 1234 I [Log:UNDEFINED] This should be ignored as well",
         "04-30 10:02:04 1234 I [Database] <<< End database group",
     ]
 
