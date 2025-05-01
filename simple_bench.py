@@ -41,7 +41,7 @@ class GroupDefinition:
     name: str
     start_pattern: re.Pattern
     end_pattern: re.Pattern
-    log_patterns: List[LogPattern]
+    log_pattern_names: List[str]  # List of LogPattern names
 
 
 # --- 상태 관리 ---
@@ -52,9 +52,11 @@ class ParserState:
         self.current_scenario: Optional[Scenario] = None
         self.active_groups: Dict[str, List[Group]] = {}
         self.group_definitions: Dict[str, GroupDefinition] = {}
+        self.log_patterns: Dict[str, LogPattern] = {}  # Stores LogPatterns by name
 
-    def set_definitions(self, definitions: Dict[str, GroupDefinition]):
-        self.group_definitions = definitions
+    def set_definitions(self, group_definitions: Dict[str, GroupDefinition], log_patterns: Dict[str, LogPattern]):
+        self.group_definitions = group_definitions
+        self.log_patterns = log_patterns
 
     def start_scenario(self, name: str):
         self.current_scenario = Scenario(name=name)
@@ -79,8 +81,11 @@ class ParserState:
             definition = self.group_definitions.get(group_name)
             if not definition:
                 continue
-            for pattern in definition.log_patterns:
-                if any(tag in log.content for tag in pattern.tags):
+            for log_pattern_name in definition.log_pattern_names:
+                pattern = self.log_patterns.get(log_pattern_name)
+                if not pattern:
+                    continue
+                if pattern.pattern.search(log.content):  # Use LogPattern's pattern to check content
                     for group in group_list:
                         group.logs.append(log)
                     break

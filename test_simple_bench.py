@@ -9,23 +9,35 @@ from simple_bench import (
 
 
 @pytest.fixture
-def group_definitions():
+def log_patterns():
+    return {
+        "NetworkLog": LogPattern(
+            name="NetworkLog",
+            pattern=re.compile(r"\[Log:NETWORK\]"),
+            tags=["NETWORK"]
+        ),
+        "DatabaseLog": LogPattern(
+            name="DatabaseLog",
+            pattern=re.compile(r"\[Log:DB\]"),
+            tags=["DB"]
+        )
+    }
+
+
+@pytest.fixture
+def group_definitions(log_patterns):
     return {
         "Network": GroupDefinition(
             name="Network",
             start_pattern=re.compile(r"\[Network\] >>> Start network group"),
             end_pattern=re.compile(r"\[Network\] <<< End network group"),
-            log_patterns=[
-                LogPattern(name="NetworkLog", pattern=re.compile(r"\[Log:NETWORK\]"), tags=["NETWORK"])
-            ]
+            log_pattern_names=["NetworkLog"]
         ),
         "Database": GroupDefinition(
             name="Database",
             start_pattern=re.compile(r"\[Database\] >>> Start database group"),
             end_pattern=re.compile(r"\[Database\] <<< End database group"),
-            log_patterns=[
-                LogPattern(name="DatabaseLog", pattern=re.compile(r"\[Log:DB\]"), tags=["DB"])
-            ]
+            log_pattern_names=["DatabaseLog"]
         )
     }
 
@@ -56,9 +68,9 @@ def sample_logs():
     ]
 
 
-def test_parser_state_with_multiple_scenarios_and_groups(group_definitions, sample_logs):
+def test_parser_state_with_multiple_scenarios_and_groups(group_definitions, log_patterns, sample_logs):
     state = ParserState()
-    state.set_definitions(group_definitions)
+    state.set_definitions(group_definitions, log_patterns)
 
     handlers = [
         ScenarioHandler(),
