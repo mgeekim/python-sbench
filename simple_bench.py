@@ -42,6 +42,14 @@ class GroupDefinition:
     log_patterns: List[str]  # LogPattern 이름 목록
 
 
+def create_log_pattern_map(patterns: List[LogPattern]) -> Dict[str, LogPattern]:
+    return {pattern.name: pattern for pattern in patterns}
+
+
+def create_group_definition_map(definitions: List[GroupDefinition]) -> Dict[str, GroupDefinition]:
+    return {definition.name: definition for definition in definitions}
+
+
 # --- 파서 상태 ---
 
 class ParserState:

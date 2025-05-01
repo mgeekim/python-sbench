@@ -3,40 +3,40 @@ import re
 import pytest
 
 from simple_bench import LogPattern, GroupDefinition, ParserState, ScenarioHandler, GroupHandler, TaggedLogHandler, \
-    parse_line
+    parse_line, create_log_pattern_map, create_group_definition_map
 
 
 @pytest.fixture
 def log_patterns():
-    return {
-        "NetworkLog": LogPattern(name="NetworkLog", pattern=re.compile(r"\[Log:NETWORK\]"), tags=["NETWORK"]),
-        "DatabaseLog": LogPattern(name="DatabaseLog", pattern=re.compile(r"\[Log:DB\]"), tags=["DB"]),
-        "AuthLog": LogPattern(name="AuthLog", pattern=re.compile(r"\[Log:AUTH\]"), tags=["AUTH"]),
-    }
+    return [
+        LogPattern(name="NetworkLog", pattern=re.compile(r"\[Log:NETWORK\]"), tags=["NETWORK"]),
+        LogPattern(name="DatabaseLog", pattern=re.compile(r"\[Log:DB\]"), tags=["DB"]),
+        LogPattern(name="AuthLog", pattern=re.compile(r"\[Log:AUTH\]"), tags=["AUTH"]),
+    ]
 
 
 @pytest.fixture
 def group_definitions():
-    return {
-        "Network": GroupDefinition(
+    return [
+        GroupDefinition(
             name="Network",
             start_pattern=re.compile(r"\[Network\] >>> Start network group"),
             end_pattern=re.compile(r"\[Network\] <<< End network group"),
             log_patterns=["NetworkLog", "AuthLog"]
         ),
-        "Database": GroupDefinition(
+        GroupDefinition(
             name="Database",
             start_pattern=re.compile(r"\[Database\] >>> Start database group"),
             end_pattern=re.compile(r"\[Database\] <<< End database group"),
             log_patterns=["DatabaseLog"]
         ),
-        "Authentication": GroupDefinition(
+        GroupDefinition(
             name="Authentication",
             start_pattern=re.compile(r"\[Authentication\] >>> Start authentication group"),
             end_pattern=re.compile(r"\[Authentication\] <<< End authentication group"),
             log_patterns=["AuthLog"]
         )
-    }
+    ]
 
 
 @pytest.fixture
@@ -67,6 +67,9 @@ def sample_logs():
 
 
 def test_parser_state_with_active_and_completed_groups(group_definitions, sample_logs, log_patterns):
+    group_definitions = create_group_definition_map(group_definitions)
+    log_patterns = create_log_pattern_map(log_patterns)
+
     state = ParserState()
     state.set_definitions(group_definitions, log_patterns)
 
