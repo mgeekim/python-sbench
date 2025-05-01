@@ -42,27 +42,32 @@ class GroupDefinition:
     log_pattern_names: List[str]  # LogPattern 이름 목록
 
 
-def create_log_pattern_map(patterns: List[LogPattern]) -> Dict[str, LogPattern]:
-    return {pattern.name: pattern for pattern in patterns}
+# --- 정의 레지스트리 클래스 ---
+class DefinitionRegistry:
+    def __init__(self, group_definitions: List[GroupDefinition], log_patterns: List[LogPattern]):
+        self.group_definition_map: Dict[str, GroupDefinition] = {
+            definition.name: definition for definition in group_definitions
+        }
+        self.log_pattern_map: Dict[str, LogPattern] = {
+            pattern.name: pattern for pattern in log_patterns
+        }
 
+    def get_group_definition(self, name: str) -> Optional[GroupDefinition]:
+        return self.group_definition_map.get(name)
 
-def create_group_definition_map(definitions: List[GroupDefinition]) -> Dict[str, GroupDefinition]:
-    return {definition.name: definition for definition in definitions}
+    def get_log_pattern(self, name: str) -> Optional[LogPattern]:
+        return self.log_pattern_map.get(name)
 
+    def all_group_definitions(self) -> Dict[str, GroupDefinition]:
+        return self.group_definition_map
 
-# --- 파서 상태 ---
 
 class LogParseContext:
-    def __init__(self):
+    def __init__(self, registry: DefinitionRegistry):
         self.scenarios: List[Scenario] = []
         self.current_scenario: Optional[Scenario] = None
         self.active_groups: Dict[str, Group] = {}
-        self.group_definitions: Dict[str, GroupDefinition] = {}
-        self.log_patterns: Dict[str, LogPattern] = {}
-
-    def set_definitions(self, definitions: Dict[str, GroupDefinition], log_patterns: Dict[str, LogPattern]):
-        self.group_definitions = definitions
-        self.log_patterns = log_patterns
+        self.registry = registry
 
     def start_scenario(self, name: str):
         if self.current_scenario:
@@ -73,14 +78,10 @@ class LogParseContext:
     def start_group(self, name: str):
         if self.current_scenario is None:
             return
-
-        # 동일 이름 그룹이 이미 존재하면 완료 처리 후 교체
         if name in self.active_groups:
             completed_group = self.active_groups.pop(name)
             self.current_scenario.groups.append(completed_group)
-
-        group = Group(name=name)
-        self.active_groups[name] = group
+        self.active_groups[name] = Group(name=name)
 
     def end_group(self, name: str):
         if self.current_scenario is None:
@@ -91,19 +92,17 @@ class LogParseContext:
 
     def add_log_to_active_groups(self, log: Log):
         for name, group in self.active_groups.items():
-            definition = self.group_definitions.get(name)
+            definition = self.registry.get_group_definition(name)
             if not definition:
                 continue
-
             for pattern_name in definition.log_pattern_names:
-                pattern = self.log_patterns.get(pattern_name)
+                pattern = self.registry.get_log_pattern(pattern_name)
                 if pattern and pattern.pattern.search(log.content):
                     group.logs.append(log)
                     break
 
     def finalize(self):
         if self.current_scenario:
-            # 종료되지 않은 그룹도 포함하여 마무리
             for group in self.active_groups.values():
                 self.current_scenario.groups.append(group)
             self.scenarios.append(self.current_scenario)
@@ -131,11 +130,11 @@ class ScenarioHandler(BaseLogHandler):
 
 
 class GroupHandler(BaseLogHandler):
-    def __init__(self, definitions: Dict[str, GroupDefinition]):
-        self.definitions = definitions
+    def __init__(self, registry: DefinitionRegistry):
+        self.registry = registry
 
     def handle(self, log: Log, state: LogParseContext):
-        for name, definition in self.definitions.items():
+        for name, definition in self.registry.all_group_definitions().items():
             if definition.start_pattern.search(log.content):
                 state.start_group(name)
             elif definition.end_pattern.search(log.content):
@@ -177,15 +176,12 @@ def parse_line(line: str, state: LogParseContext, handlers: List[BaseLogHandler]
 
 class LogParser:
     def __init__(self, group_definitions: List[GroupDefinition], log_patterns: List[LogPattern]):
-        self.group_definition_map = create_group_definition_map(group_definitions)
-        self.log_pattern_map = create_log_pattern_map(log_patterns)
-
-        self.state = LogParseContext()
-        self.state.set_definitions(self.group_definition_map, self.log_pattern_map)
+        self.registry = DefinitionRegistry(group_definitions, log_patterns)
+        self.state = LogParseContext(self.registry)
 
         self.handlers = [
             ScenarioHandler(),
-            GroupHandler(self.group_definition_map),
+            GroupHandler(self.registry),
             TaggedLogHandler()
         ]
 
