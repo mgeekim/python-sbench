@@ -61,7 +61,6 @@ def sample_logs():
         "04-30 10:01:00 1234 I [Scenario] SignupFlow",
         "04-30 10:01:01 1234 I [Network] >>> Start network group",
         "04-30 10:01:02 1234 I [Log:NETWORK] Request to /signup",
-
         "04-30 10:01:03 1234 I [Log:UNKNOWN] This log is also ignored",
         "04-30 10:01:04 1234 I [Network] >>> Start network group",
         "04-30 10:01:05 1234 I [Log:NETWORK] Retry request to /signup",
