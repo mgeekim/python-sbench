@@ -86,5 +86,7 @@ def test_parser_state_with_active_and_completed_groups(group_definitions, sample
 
     signup_scenario = state.scenarios[1]
     assert len(signup_scenario.groups) == 2  # Network and Authentication groups
+    assert signup_scenario.groups[0].name == 'Authentication'
+    assert signup_scenario.groups[1].name == 'Network'
     assert len(signup_scenario.groups[0].logs) == 2  # Network logs
     assert len(signup_scenario.groups[1].logs) == 3  # Authentication logs
