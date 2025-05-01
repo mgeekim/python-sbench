@@ -1,7 +1,8 @@
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 
 
 # --- 데이터 클래스 정의 ---
@@ -64,7 +65,7 @@ class DefinitionRegistry:
 
 class GroupManager:
     def __init__(self, registry: DefinitionRegistry):
-        self._registry = registry
+        self._registry: DefinitionRegistry = registry
         self._active: Dict[str, Group] = {}
 
     def start_group(self, name: str) -> Optional[Group]:
@@ -115,19 +116,22 @@ class ScenarioManager:
 
 
 class LogParseContext:
-    def __init__(self, registry: DefinitionRegistry):
+    def __init__(self, registry: DefinitionRegistry, on_group_ended: Optional[callable] = None):
         self._groups = GroupManager(registry)
         self._scenarios = ScenarioManager()
+        self._on_group_ended: Callable = on_group_ended
 
     def start_scenario(self, name: str):
         self._scenarios.start_scenario(name)
 
     def start_group(self, name: str):
-        if (completed := self._groups.start_group(name)):
+        if completed := self._groups.start_group(name):
             self._scenarios.add_group(completed)
 
     def end_group(self, name: str):
-        if (completed := self._groups.end_group(name)):
+        if completed := self._groups.end_group(name):
+            if self._on_group_ended:
+                self._on_group_ended(completed)
             self._scenarios.add_group(completed)
 
     def add_log_to_active_groups(self, log: Log):
@@ -135,6 +139,9 @@ class LogParseContext:
 
     def finalize(self):
         remaining_groups = self._groups.flush()
+        for group in remaining_groups:
+            if self._on_group_ended:
+                self._on_group_ended(group)
         self._scenarios.finalize(remaining_groups)
 
     def get_scenarios(self) -> List[Scenario]:
@@ -182,9 +189,9 @@ LOG_LINE_PATTERN = re.compile(
 
 
 def parse_log_line(line: str) -> Optional[Log]:
-    match = LOG_LINE_PATTERN.match(line)
-    if not match:
+    if not (match := LOG_LINE_PATTERN.match(line)):
         return None
+
     return Log(
         timestamp=datetime.strptime(match.group("timestamp"), "%m-%d %H:%M:%S"),
         pid=int(match.group("pid")),
@@ -194,18 +201,16 @@ def parse_log_line(line: str) -> Optional[Log]:
     )
 
 
-def parse_line(line: str, state: LogParseContext, handlers: List[BaseLogHandler]):
-    log = parse_log_line(line)
-    if not log:
-        return
-    for handler in handlers:
-        handler.handle(log, state)
+def on_group_ended(group: Group):
+    logging.info(f"[Group Ended] {group.name} - {len(group.logs)} logs")
+    for log in group.logs:
+        logging.debug(f"  {log.raw.strip()}")
 
 
 class LogParser:
     def __init__(self, group_definitions: List[GroupDefinition], log_patterns: List[LogPattern]):
         self.registry = DefinitionRegistry(group_definitions, log_patterns)
-        self.state = LogParseContext(self.registry)
+        self.state = LogParseContext(self.registry, on_group_ended)
 
         self.handlers = [
             ScenarioHandler(),
@@ -213,10 +218,13 @@ class LogParser:
             TaggedLogHandler()
         ]
 
-    def parse_lines(self, lines: List[str]):
-        for line in lines:
-            parse_line(line, self.state, self.handlers)
-        self.state.finalize()
+    def parse_line(self, line: str):
+        log = parse_log_line(line)
+        if not log:
+            return
+        for handler in self.handlers:
+            handler.handle(log, self.state)
 
-    def get_scenarios(self) -> List[Scenario]:
+    def finalize(self):
+        self.state.finalize()
         return self.state.get_scenarios()

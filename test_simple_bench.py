@@ -79,8 +79,10 @@ def sample_logs():
 
 def test_log_parser_parses_scenarios_correctly(group_definitions, log_patterns, sample_logs):
     parser = LogParser(group_definitions, log_patterns)
-    parser.parse_lines(sample_logs)
-    scenarios = parser.get_scenarios()
+
+    for line in sample_logs:
+        parser.parse_line(line)  # 한 줄씩 처리
+    scenarios = parser.finalize()
 
     assert len(scenarios) == 3
 
