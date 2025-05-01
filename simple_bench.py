@@ -2,7 +2,12 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(levelname)s:%(name)s:%(message)s'
+)
 
 
 # --- 데이터 클래스 정의 ---
@@ -119,7 +124,7 @@ class LogParseContext:
     def __init__(self, registry: DefinitionRegistry, on_group_ended: Optional[callable] = None):
         self._groups = GroupManager(registry)
         self._scenarios = ScenarioManager()
-        self._on_group_ended: Callable = on_group_ended
+        self._on_group_ended: callable = on_group_ended
 
     def start_scenario(self, name: str):
         self._scenarios.start_scenario(name)
@@ -219,8 +224,7 @@ class LogParser:
         ]
 
     def parse_line(self, line: str):
-        log = parse_log_line(line)
-        if not log:
+        if not (log := parse_log_line(line)):
             return
         for handler in self.handlers:
             handler.handle(log, self.state)
