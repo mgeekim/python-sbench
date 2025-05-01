@@ -1,5 +1,3 @@
-# log_parser_refactored.py
-
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -77,6 +75,7 @@ class ParserState:
                 del self.active_groups[name]
 
     def add_log_to_active_groups(self, log: Log):
+        # 그룹 내에서 동일한 로그가 여러 번 반복될 수 있도록 수정
         for group_name, group_list in self.active_groups.items():
             definition = self.group_definitions.get(group_name)
             if not definition:
@@ -87,7 +86,7 @@ class ParserState:
                     continue
                 if pattern.pattern.search(log.content):  # Use LogPattern's pattern to check content
                     for group in group_list:
-                        group.logs.append(log)
+                        group.logs.append(log)  # 동일한 로그가 여러 번 추가될 수 있도록 함
                     break
 
     def finalize(self):

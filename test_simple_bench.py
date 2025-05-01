@@ -2,10 +2,8 @@ import re
 
 import pytest
 
-from simple_bench import (
-    ParserState, GroupDefinition, LogPattern,
-    ScenarioHandler, GroupHandler, TaggedLogHandler, parse_line
-)
+from simple_bench import LogPattern, GroupDefinition, ParserState, ScenarioHandler, GroupHandler, TaggedLogHandler, \
+    parse_line
 
 
 @pytest.fixture
@@ -51,9 +49,10 @@ def sample_logs():
         "04-30 10:00:03 1234 I [Database] >>> Start database group",
         "04-30 10:00:04 1234 I [Log:DB] Querying user table",
         "04-30 10:00:05 1234 I [Log:NETWORK] Received response from /api/login",
-        "04-30 10:00:06 1234 I [Network] <<< End network group",
-        "04-30 10:00:07 1234 I [Log:DB] Inserting login history",
-        "04-30 10:00:08 1234 I [Database] <<< End database group",
+        "04-30 10:00:06 1234 I [Log:NETWORK] Received response from /api/login",
+        "04-30 10:00:07 1234 I [Network] <<< End network group",
+        "04-30 10:00:08 1234 I [Log:DB] Inserting login history",
+        "04-30 10:00:09 1234 I [Database] <<< End database group",
         "04-30 10:01:00 1234 I [Scenario] SignupFlow",
         "04-30 10:01:01 1234 I [Network] >>> Start network group",
         "04-30 10:01:02 1234 I [Log:NETWORK] Sending request to /api/signup",
@@ -92,7 +91,7 @@ def test_parser_state_with_multiple_scenarios_and_groups(group_definitions, log_
     assert len(login.groups) == 2
     assert login.groups[0].name == "Network"
     assert login.groups[1].name == "Database"
-    assert len(login.groups[0].logs) == 2  # NETWORK logs
+    assert len(login.groups[0].logs) == 3  # NETWORK logs
     assert len(login.groups[1].logs) == 2  # DB logs
 
     # SignupFlow
