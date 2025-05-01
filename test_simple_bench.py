@@ -2,8 +2,7 @@ import re
 
 import pytest
 
-from simple_bench import LogPattern, GroupDefinition, ParserState, ScenarioHandler, GroupHandler, TaggedLogHandler, \
-    parse_line, create_log_pattern_map, create_group_definition_map
+from simple_bench import LogPattern, GroupDefinition, LogParser
 
 
 @pytest.fixture
@@ -22,19 +21,19 @@ def group_definitions():
             name="Network",
             start_pattern=re.compile(r"\[Network\] >>> Start network group"),
             end_pattern=re.compile(r"\[Network\] <<< End network group"),
-            log_patterns=["NetworkLog", "AuthLog"]
+            log_pattern_names=["NetworkLog", "AuthLog"]
         ),
         GroupDefinition(
             name="Database",
             start_pattern=re.compile(r"\[Database\] >>> Start database group"),
             end_pattern=re.compile(r"\[Database\] <<< End database group"),
-            log_patterns=["DatabaseLog"]
+            log_pattern_names=["DatabaseLog"]
         ),
         GroupDefinition(
             name="Authentication",
             start_pattern=re.compile(r"\[Authentication\] >>> Start authentication group"),
             end_pattern=re.compile(r"\[Authentication\] <<< End authentication group"),
-            log_patterns=["AuthLog"]
+            log_pattern_names=["AuthLog"]
         )
     ]
 
@@ -67,26 +66,13 @@ def sample_logs():
 
 
 def test_parser_state_with_active_and_completed_groups(group_definitions, sample_logs, log_patterns):
-    group_definitions = create_group_definition_map(group_definitions)
-    log_patterns = create_log_pattern_map(log_patterns)
-
-    state = ParserState()
-    state.set_definitions(group_definitions, log_patterns)
-
-    handlers = [
-        ScenarioHandler(),
-        GroupHandler(group_definitions),
-        TaggedLogHandler()
-    ]
-
-    for line in sample_logs:
-        parse_line(line, state, handlers)
-    state.finalize()
-
+    parser = LogParser(group_definitions, log_patterns)
+    parser.parse_lines(sample_logs)
+    scenarios = parser.get_scenarios()
     # Check that completed groups are correctly saved in the scenario's groups
-    assert len(state.scenarios) == 2  # Two scenarios: LoginFlow and SignupFlow
+    assert len(scenarios) == 2  # Two scenarios: LoginFlow and SignupFlow
 
-    login_scenario = state.scenarios[0]
+    login_scenario = scenarios[0]
     assert len(login_scenario.groups) == 3  # Network, Authentication, and Network groups
     assert login_scenario.groups[0].name == 'Network'
     assert login_scenario.groups[1].name == 'Authentication'
@@ -96,7 +82,7 @@ def test_parser_state_with_active_and_completed_groups(group_definitions, sample
     assert len(login_scenario.groups[1].logs) == 2  # Authentication logs
     assert len(login_scenario.groups[2].logs) == 3  # Second Network logs
 
-    signup_scenario = state.scenarios[1]
+    signup_scenario = scenarios[1]
     assert len(signup_scenario.groups) == 2  # Network and Authentication groups
     assert signup_scenario.groups[0].name == 'Authentication'
     assert signup_scenario.groups[1].name == 'Network'

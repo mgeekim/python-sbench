@@ -39,7 +39,7 @@ class GroupDefinition:
     name: str
     start_pattern: re.Pattern
     end_pattern: re.Pattern
-    log_patterns: List[str]  # LogPattern 이름 목록
+    log_pattern_names: List[str]  # LogPattern 이름 목록
 
 
 def create_log_pattern_map(patterns: List[LogPattern]) -> Dict[str, LogPattern]:
@@ -52,7 +52,7 @@ def create_group_definition_map(definitions: List[GroupDefinition]) -> Dict[str,
 
 # --- 파서 상태 ---
 
-class ParserState:
+class LogParseContext:
     def __init__(self):
         self.scenarios: List[Scenario] = []
         self.current_scenario: Optional[Scenario] = None
@@ -95,7 +95,7 @@ class ParserState:
             if not definition:
                 continue
 
-            for pattern_name in definition.log_patterns:
+            for pattern_name in definition.log_pattern_names:
                 pattern = self.log_patterns.get(pattern_name)
                 if pattern and pattern.pattern.search(log.content):
                     group.logs.append(log)
@@ -117,14 +117,14 @@ class ParserState:
 # --- 로그 핸들러 ---
 
 class BaseLogHandler:
-    def handle(self, log: Log, state: ParserState):
+    def handle(self, log: Log, state: LogParseContext):
         raise NotImplementedError()
 
 
 class ScenarioHandler(BaseLogHandler):
     pattern = re.compile(r"\[Scenario\] (.+)")
 
-    def handle(self, log: Log, state: ParserState):
+    def handle(self, log: Log, state: LogParseContext):
         match = self.pattern.search(log.content)
         if match:
             state.start_scenario(match.group(1))
@@ -134,7 +134,7 @@ class GroupHandler(BaseLogHandler):
     def __init__(self, definitions: Dict[str, GroupDefinition]):
         self.definitions = definitions
 
-    def handle(self, log: Log, state: ParserState):
+    def handle(self, log: Log, state: LogParseContext):
         for name, definition in self.definitions.items():
             if definition.start_pattern.search(log.content):
                 state.start_group(name)
@@ -143,7 +143,7 @@ class GroupHandler(BaseLogHandler):
 
 
 class TaggedLogHandler(BaseLogHandler):
-    def handle(self, log: Log, state: ParserState):
+    def handle(self, log: Log, state: LogParseContext):
         state.add_log_to_active_groups(log)
 
 
@@ -167,9 +167,32 @@ def parse_log_line(line: str) -> Optional[Log]:
     )
 
 
-def parse_line(line: str, state: ParserState, handlers: List[BaseLogHandler]):
+def parse_line(line: str, state: LogParseContext, handlers: List[BaseLogHandler]):
     log = parse_log_line(line)
     if not log:
         return
     for handler in handlers:
         handler.handle(log, state)
+
+
+class LogParser:
+    def __init__(self, group_definitions: List[GroupDefinition], log_patterns: List[LogPattern]):
+        self.group_definition_map = create_group_definition_map(group_definitions)
+        self.log_pattern_map = create_log_pattern_map(log_patterns)
+
+        self.state = LogParseContext()
+        self.state.set_definitions(self.group_definition_map, self.log_pattern_map)
+
+        self.handlers = [
+            ScenarioHandler(),
+            GroupHandler(self.group_definition_map),
+            TaggedLogHandler()
+        ]
+
+    def parse_lines(self, lines: List[str]):
+        for line in lines:
+            parse_line(line, self.state, self.handlers)
+        self.state.finalize()
+
+    def get_scenarios(self) -> List[Scenario]:
+        return self.state.get_scenarios()
