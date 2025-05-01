@@ -7,25 +7,34 @@ from simple_bench import LogPattern, GroupDefinition, ParserState, ScenarioHandl
 
 
 @pytest.fixture
+def log_patterns():
+    return {
+        "NetworkLog": LogPattern(name="NetworkLog", pattern=re.compile(r"\[Log:NETWORK\]"), tags=["NETWORK"]),
+        "DatabaseLog": LogPattern(name="DatabaseLog", pattern=re.compile(r"\[Log:DB\]"), tags=["DB"]),
+        "AuthLog": LogPattern(name="AuthLog", pattern=re.compile(r"\[Log:AUTH\]"), tags=["AUTH"]),
+    }
+
+
+@pytest.fixture
 def group_definitions():
     return {
         "Network": GroupDefinition(
             name="Network",
             start_pattern=re.compile(r"\[Network\] >>> Start network group"),
             end_pattern=re.compile(r"\[Network\] <<< End network group"),
-            log_patterns=[LogPattern(name="NetworkLog", pattern=re.compile(r"\[Log:NETWORK\]"), tags=["NETWORK"])]
+            log_patterns=["NetworkLog"]
         ),
         "Database": GroupDefinition(
             name="Database",
             start_pattern=re.compile(r"\[Database\] >>> Start database group"),
             end_pattern=re.compile(r"\[Database\] <<< End database group"),
-            log_patterns=[LogPattern(name="DatabaseLog", pattern=re.compile(r"\[Log:DB\]"), tags=["DB"])]
+            log_patterns=["DatabaseLog"]
         ),
         "Authentication": GroupDefinition(
             name="Authentication",
             start_pattern=re.compile(r"\[Authentication\] >>> Start authentication group"),
             end_pattern=re.compile(r"\[Authentication\] <<< End authentication group"),
-            log_patterns=[LogPattern(name="AuthLog", pattern=re.compile(r"\[Log:AUTH\]"), tags=["AUTH"])]
+            log_patterns=["AuthLog"]
         )
     }
 
@@ -57,9 +66,9 @@ def sample_logs():
     ]
 
 
-def test_parser_state_with_active_and_completed_groups(group_definitions, sample_logs):
+def test_parser_state_with_active_and_completed_groups(group_definitions, sample_logs, log_patterns):
     state = ParserState()
-    state.set_definitions(group_definitions)
+    state.set_definitions(group_definitions, log_patterns)
 
     handlers = [
         ScenarioHandler(),

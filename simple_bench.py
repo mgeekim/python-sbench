@@ -39,20 +39,22 @@ class GroupDefinition:
     name: str
     start_pattern: re.Pattern
     end_pattern: re.Pattern
-    log_patterns: List[LogPattern]
+    log_patterns: List[str]  # GroupDefinition은 LogPattern을 참조만 함
 
 
 # --- 상태 관리 ---
 
 class ParserState:
     def __init__(self):
-        self.scenarios: List[Scenario] = []  # 모든 시나리오 보존
-        self.current_scenario: Optional[Scenario] = None  # 현재 시나리오
-        self.active_groups: Dict[str, Group] = {}  # 활성 그룹
-        self.group_definitions: Dict[str, GroupDefinition] = {}  # 그룹 정의
+        self.scenarios: List[Scenario] = []
+        self.current_scenario: Optional[Scenario] = None
+        self.active_groups: Dict[str, Group] = {}
+        self.group_definitions: Dict[str, GroupDefinition] = {}
+        self.log_patterns: Dict[str, LogPattern] = {}
 
-    def set_definitions(self, definitions: Dict[str, GroupDefinition]):
+    def set_definitions(self, definitions: Dict[str, GroupDefinition], log_patterns: Dict[str, LogPattern]):
         self.group_definitions = definitions
+        self.log_patterns = log_patterns  # 이름으로 조회 가능하게
 
     def start_scenario(self, name: str):
         # 새로운 시나리오가 시작되면 기존 시나리오는 self.scenarios에 저장
@@ -63,6 +65,7 @@ class ParserState:
     def start_group(self, name: str):
         if self.current_scenario is None:
             return
+
         # 이미 active_groups에 해당 이름의 그룹이 존재하면, 이전 그룹을 'end' 상태로 변경
         if name in self.active_groups:
             completed_group = self.active_groups.pop(name)
@@ -81,9 +84,11 @@ class ParserState:
             definition = self.group_definitions.get(group_name)
             if not definition:
                 continue
-            for pattern in definition.log_patterns:
-                if any(tag in log.content for tag in pattern.tags):
+            for pattern_name in definition.log_patterns:
+                pattern = self.log_patterns.get(pattern_name)
+                if pattern and pattern.pattern.search(log.content):
                     group.logs.append(log)
+                    break  # 한 번 매칭되면 추가 후 중단
 
     def finalize(self):
         # 모든 활성 그룹을 완료 상태로 변경하여 scenario의 groups에 추가
