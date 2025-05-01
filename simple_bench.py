@@ -1,175 +1,142 @@
-# Re-run the full implementation after code execution environment reset
-
-# Re-import required modules
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Dict, Optional
 
 
-# === Data Classes ===
+# === 데이터 클래스 정의 ===
 
 @dataclass
-class LogEntry:
+class Log:
     timestamp: datetime
     pid: int
     level: str
-    raw: str
-    type: Optional[str] = None
-    content: Optional[str] = None
+    content: str
 
 
 @dataclass
 class LogGroup:
     name: str
-    logs: List[LogEntry] = field(default_factory=list)
+    logs: List[Log] = field(default_factory=list)
 
 
 @dataclass
-class ScenarioResult:
-    scenario: str
-    start_time: datetime
-    pid: int
-    level: str
-    groups: List[LogGroup] = field(default_factory=list)
-    logs: List[LogEntry] = field(default_factory=list)
-
-
-@dataclass
-class LogGroupDefinition:
+class LogScenario:
     name: str
-    start_pattern: re.Pattern
-    end_pattern: re.Pattern
-    log_types: List[str]
+    groups: List[LogGroup] = field(default_factory=list)
 
 
-# === State Management ===
+# === 그룹 정의 ===
 
-class LogState:
+class GroupDefinition:
+    def __init__(self, name: str, start_pattern: re.Pattern, end_pattern: re.Pattern, log_tags: List[str]):
+        self.name = name
+        self.start_pattern = start_pattern
+        self.end_pattern = end_pattern
+        self.log_tags = log_tags
+
+
+# === 상태 관리 ===
+
+class ParserState:
     def __init__(self):
-        self.scenarios: List[ScenarioResult] = []
-        self.current_scenario: Optional[ScenarioResult] = None
-        self.group_stack: List[LogGroup] = []
-        self.group_definitions: Dict[str, LogGroupDefinition] = {}
+        self.current_scenario: Optional[LogScenario] = None
+        self.active_groups: Dict[str, LogGroup] = {}
+        self.definitions: Dict[str, GroupDefinition] = {}
+        self.completed_scenarios: List[LogScenario] = []
 
-    def set_group_definitions(self, defs: Dict[str, LogGroupDefinition]):
-        self.group_definitions = defs
+    def set_definitions(self, defs: Dict[str, GroupDefinition]):
+        self.definitions = defs
 
-    def start_scenario(self, name: str, entry: LogEntry):
+    def start_new_scenario(self, name: str):
         if self.current_scenario:
-            self.scenarios.append(self.current_scenario)
-        self.current_scenario = ScenarioResult(
-            scenario=name,
-            start_time=entry.timestamp,
-            pid=entry.pid,
-            level=entry.level
-        )
-        self.group_stack.clear()
+            self.completed_scenarios.append(self.current_scenario)
+        self.current_scenario = LogScenario(name=name)
+        self.active_groups.clear()
 
-    def start_group(self, name: str):
-        self.group_stack.append(LogGroup(name=name))
+    def start_group(self, group_name: str):
+        if self.current_scenario and group_name not in self.active_groups:
+            self.active_groups[group_name] = LogGroup(name=group_name)
 
-    def end_group(self, name: str):
-        for i in reversed(range(len(self.group_stack))):
-            if self.group_stack[i].name == name:
-                finished_group = self.group_stack.pop(i)
-                if self.current_scenario:
-                    self.current_scenario.groups.append(finished_group)
-                return
+    def end_group(self, group_name: str):
+        if self.current_scenario and group_name in self.active_groups:
+            self.current_scenario.groups.append(self.active_groups.pop(group_name))
 
-    def add_log_to_groups(self, log: LogEntry, log_type: Optional[str]):
-        if not log_type:
-            return
-        for group in self.group_stack:
-            defn = self.group_definitions.get(group.name)
-            if defn and log_type in defn.log_types:
-                group.logs.append(log)
-
-    def add_log_to_scenario(self, log: LogEntry):
-        if self.current_scenario:
-            self.current_scenario.logs.append(log)
+    def add_log(self, tag: str, log: Log):
+        for group_def in self.definitions.values():
+            if tag in group_def.log_tags and group_def.name in self.active_groups:
+                self.active_groups[group_def.name].logs.append(log)
 
     def finalize(self):
         if self.current_scenario:
-            self.scenarios.append(self.current_scenario)
+            for group in self.active_groups.values():
+                self.current_scenario.groups.append(group)
+            self.completed_scenarios.append(self.current_scenario)
             self.current_scenario = None
+            self.active_groups.clear()
 
-    def get_all_results(self) -> List[ScenarioResult]:
-        return self.scenarios
+    def get_scenarios(self) -> List[LogScenario]:
+        return self.completed_scenarios
 
 
-# === Handlers ===
+# === 로그 핸들러 ===
 
 class LogHandler:
-    def handle(self, log: LogEntry, state: LogState):
+    def handle(self, line: str, state: ParserState, parsed: Log):
         raise NotImplementedError
 
 
-class ScenarioLogHandler(LogHandler):
-    pattern = re.compile(r"\[Scenario\]\s+(?P<name>\w+)")
+class ScenarioHandler(LogHandler):
+    pattern = re.compile(r"\[Scenario\] (?P<name>.+)")
 
-    def handle(self, log: LogEntry, state: LogState):
-        match = self.pattern.search(log.raw)
-        if match:
-            state.start_scenario(match.group("name"), log)
-
-
-class GroupLogHandler(LogHandler):
-    def __init__(self, group_definitions: Dict[str, LogGroupDefinition]):
-        self.group_definitions = group_definitions
-
-    def handle(self, log: LogEntry, state: LogState):
-        for defn in self.group_definitions.values():
-            if defn.start_pattern.search(log.raw):
-                state.start_group(defn.name)
-            elif defn.end_pattern.search(log.raw):
-                state.end_group(defn.name)
+    def handle(self, line: str, state: ParserState, parsed: Log):
+        m = self.pattern.search(parsed.content)
+        if m:
+            state.start_new_scenario(m.group("name"))
 
 
-class LogEntryHandler(LogHandler):
-    log_type_pattern = re.compile(r"\[Log:(?P<type>\w+)\]\s+(?P<content>.+)")
+class GroupHandler(LogHandler):
+    def __init__(self, definitions: Dict[str, GroupDefinition]):
+        self.definitions = definitions
 
-    def handle(self, log: LogEntry, state: LogState):
-        match = self.log_type_pattern.search(log.raw)
-        if match:
-            log.type = match.group("type")
-            log.content = match.group("content")
-            state.add_log_to_groups(log, log.type)
-        else:
-            log.type = log.content = None
-        state.add_log_to_scenario(log)
+    def handle(self, line: str, state: ParserState, parsed: Log):
+        for name, defn in self.definitions.items():
+            if defn.start_pattern.search(parsed.content):
+                state.start_group(name)
+            elif defn.end_pattern.search(parsed.content):
+                state.end_group(name)
 
 
-# === Parser ===
+class TaggedLogHandler(LogHandler):
+    pattern = re.compile(r"\[Log:(?P<tag>\w+)\] (?P<message>.+)")
 
-LOG_LINE_PATTERN = re.compile(
-    r"(?P<timestamp>\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+"
-    r"(?P<pid>\d+)\s+"
-    r"(?P<level>[A-Z])\s+"
-    r"(?P<content>.+)"
-)
+    def handle(self, line: str, state: ParserState, parsed: Log):
+        m = self.pattern.search(parsed.content)
+        if m:
+            tag = m.group("tag")
+            msg = m.group("message")
+            new_log = Log(parsed.timestamp, parsed.pid, parsed.level, msg)
+            state.add_log(tag, new_log)
 
 
-def parse_log_line(line: str) -> Optional[LogEntry]:
-    match = LOG_LINE_PATTERN.match(line)
-    if not match:
+# === 파싱 함수 ===
+
+def extract_log_parts(line: str) -> Optional[Log]:
+    pattern = re.compile(
+        r"(?P<timestamp>\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (?P<pid>\d+) (?P<level>[TDIEW]) (?P<content>.+)")
+    m = pattern.match(line)
+    if not m:
         return None
-    try:
-        timestamp = datetime.strptime(match.group("timestamp"), "%m-%d %H:%M:%S")
-        return LogEntry(
-            timestamp=timestamp,
-            pid=int(match.group("pid")),
-            level=match.group("level"),
-            raw=line.strip(),
-            content=match.group("content")
-        )
-    except Exception:
-        return None
+    timestamp = datetime.strptime(m.group("timestamp"), "%m-%d %H:%M:%S")
+    pid = int(m.group("pid"))
+    level = m.group("level")
+    content = m.group("content")
+    return Log(timestamp, pid, level, content)
 
 
-def parse_log(line: str, state: LogState, handlers: List[LogHandler]):
-    entry = parse_log_line(line)
-    if not entry:
+def parse_line(line: str, state: ParserState, handlers: List[LogHandler]):
+    parsed = extract_log_parts(line)
+    if not parsed:
         return
     for handler in handlers:
-        handler.handle(entry, state)
+        handler.handle(line, state, parsed)
