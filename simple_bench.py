@@ -68,28 +68,21 @@ class GroupManager:
         self._active: Dict[str, Group] = {}
 
     def start_group(self, name: str) -> Optional[Group]:
-        if name in self._active:
-            # 기존 그룹 완료됨
-            pop = self._active.pop(name)
-            self._active[name] = Group(name=name)
-            return pop
-        else:
-            self._active[name] = Group(name=name)
-            return None
+        existing_group = self._active.get(name, None)
+        self._active[name] = Group(name=name)
+        return existing_group  # 기존 그룹을 반환하여 기존 상태를 유지할 수 있도록 함
 
     def end_group(self, name: str) -> Optional[Group]:
         return self._active.pop(name, None)
 
     def add_log(self, log: Log):
         for name, group in self._active.items():
-            definition = self._registry.get_group_definition(name)
-            if not definition:
-                continue
-            for pattern_name in definition.log_pattern_names:
-                pattern = self._registry.get_log_pattern(pattern_name)
-                if pattern and pattern.pattern.search(log.content):
-                    group.logs.append(log)
-                    break
+            if (definition := self._registry.get_group_definition(name)):
+                for pattern_name in definition.log_pattern_names:
+                    if (pattern := self._registry.get_log_pattern(pattern_name)) and pattern.pattern.search(
+                            log.content):
+                        group.logs.append(log)
+                        break
 
     def flush(self) -> List[Group]:
         groups = list(self._active.values())
@@ -130,13 +123,11 @@ class LogParseContext:
         self._scenarios.start_scenario(name)
 
     def start_group(self, name: str):
-        completed = self._groups.start_group(name)
-        if completed:
+        if (completed := self._groups.start_group(name)):
             self._scenarios.add_group(completed)
 
     def end_group(self, name: str):
-        completed = self._groups.end_group(name)
-        if completed:
+        if (completed := self._groups.end_group(name)):
             self._scenarios.add_group(completed)
 
     def add_log_to_active_groups(self, log: Log):
